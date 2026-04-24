@@ -1,0 +1,31 @@
+# API keys and secrets
+.env
+.env.local
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Project-specific
+chroma_db/
+papers/*.pdf
+downloads/
+claude_logs/
+*.backup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
