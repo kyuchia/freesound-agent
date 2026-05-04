@@ -482,7 +482,7 @@ def run_agent(user_message: str, conversation: list = None):
         # Process each tool call
         tool_results = []
         for tool_use in tool_uses:
-            print(f"  🔧 Calling: {tool_use.name}({json.dumps(tool_use.input, ensure_ascii=False)[:80]}...)")
+            print(f"  [tool] Calling: {tool_use.name}({json.dumps(tool_use.input, ensure_ascii=False)[:80]}...)")
             result = dispatch_tool(tool_use.name, tool_use.input)
             tool_results.append({
                 "type": "tool_result",
@@ -497,7 +497,7 @@ def run_agent(user_message: str, conversation: list = None):
 
 def main():
     print("=" * 60)
-    print("🎵 Freesound Agent")
+    print("Freesound Agent")
     print("   Explore, analyze, and understand the Freesound commons")
     print("=" * 60)
     print()
@@ -516,7 +516,7 @@ def main():
 
     while True:
         try:
-            user_input = input("\n🎤 You: ").strip()
+            user_input = input("\n> ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nBye!")
             break
@@ -527,12 +527,12 @@ def main():
             print("Bye!")
             break
 
-        print("\n🤖 Agent thinking...")
+        print("\nThinking...")
         try:
             response, conversation = run_agent(user_input, conversation)
-            print(f"\n🤖 Agent:\n{response}")
+            print(f"\nAgent:\n{response}")
         except Exception as e:
-            print(f"\n❌ Error: {e}")
+            print(f"\nError: {e}")
 
 
 if __name__ == "__main__":

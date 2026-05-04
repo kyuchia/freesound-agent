@@ -617,7 +617,7 @@ def main() -> None:
 
     if args.write_report:
         write_markdown_report(results, summary, args.report_path)
-        print(f"📄 Markdown report written to: {args.report_path}\n")
+        print(f"Markdown report written to: {args.report_path}\n")
 
 
 if __name__ == "__main__":
