@@ -10,3 +10,4 @@ pydub>=0.25.1
 streamlit>=1.30.0
 matplotlib>=3.7.0
 python-dotenv>=1.0.0
+pytest>=8.0

@@ -156,6 +156,16 @@ Latest results: see [`eval_results.md`](./eval_results.md).
 
 The evaluation surfaces both retrieval strengths (90% in-scope hit rate, MRR ≈ 0.9) and methodological limits (absolute distance thresholds are fragile; in-scope vs OOS *separation* is the more informative signal). Findings and follow-up work are documented in the report itself.
 
+## Tests
+
+Offline unit tests for the agent's tool-use loop live in `tests/`. They replace the Anthropic client with a scripted fake and block network access, so they need no API keys, no papers and no RAG index:
+
+```bash
+pytest
+```
+
+They check that a failing tool becomes an `is_error` tool result, that a failed or interrupted turn is rolled back so the next turn still works, that the per-turn tool-round cap forces a final answer, and that `max_tokens` / `refusal` stop reasons leave a valid conversation history.
+
 ## Project layout
 
 ```
@@ -164,6 +174,8 @@ freesound-agent/
 ├── knowledge.py          # RAG: PDF → chunks → embed → ChromaDB
 ├── eval.py               # retrieval evaluation (13 queries)
 ├── eval_results.md       # latest evaluation report (committed)
+├── tests/                # offline unit tests (pytest, no keys needed)
+├── pytest.ini
 ├── requirements.txt
 ├── .env                  # API keys (not committed)
 ├── .gitignore
