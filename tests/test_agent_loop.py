@@ -7,7 +7,7 @@ The fake client checks each request the way the real API does (roles
 alternate, every tool_use is answered by a tool_result in the next user
 message), so a broken history fails the test that produced it.
 
-Run from the repo root (tests/conftest.py sets dummy API keys):
+Run from the repo root:
     pytest
 """
 

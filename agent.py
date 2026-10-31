@@ -12,6 +12,7 @@ Setup:
 """
 
 import os
+import sys
 import json
 import anthropic
 import freesound
@@ -35,7 +36,10 @@ DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 # ── Freesound Client ────────────────────────────────────────────────
 fs_client = freesound.FreesoundClient()
-fs_client.set_token(FREESOUND_API_KEY, "token")
+# set_token(None) raises, so only set it when a key exists; main() reports
+# missing keys. This keeps `import agent` working without keys (e.g. in tests).
+if FREESOUND_API_KEY:
+    fs_client.set_token(FREESOUND_API_KEY, "token")
 
 # ── Tool Definitions (Claude API format) ────────────────────────────
 TOOLS = [
@@ -548,7 +552,27 @@ def run_agent(user_message: str, conversation: list | None = None) -> tuple[str,
 
 # ── CLI Interface ───────────────────────────────────────────────────
 
+def check_api_keys() -> None:
+    """Exit with a clear message if either API key is missing."""
+    missing = [
+        name for name, value in (
+            ("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
+            ("FREESOUND_API_KEY", FREESOUND_API_KEY),
+        )
+        if not value
+    ]
+    if missing:
+        it = "them" if len(missing) > 1 else "it"
+        sys.exit(
+            f"Error: missing {', '.join(missing)}.\n"
+            f"Add {it} to a .env file in the project root (see README, "
+            f"'Configure API keys') or export {it} in your shell, then run again."
+        )
+
+
 def main():
+    check_api_keys()
+
     print("=" * 60)
     print("Freesound Agent")
     print("   Explore, analyze, and understand the Freesound commons")
