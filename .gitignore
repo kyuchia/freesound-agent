@@ -29,3 +29,4 @@ claude_logs/
 
 # macOS
 .DS_Store
+requirements-snapshot.txt
