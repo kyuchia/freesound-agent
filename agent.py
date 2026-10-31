@@ -28,6 +28,8 @@ from knowledge import query_audio_knowledge
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 FREESOUND_API_KEY = os.environ.get("FREESOUND_API_KEY")
 MODEL = "claude-haiku-4-5-20251001"
+MAX_TOKENS = 4096
+MAX_TOOL_ROUNDS = 8  # tool-use rounds per user turn before forcing a final answer
 DOWNLOAD_DIR = Path("./downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
@@ -448,49 +450,100 @@ Keep responses concise and insightful. When you spot interesting patterns or bia
 highlight them — that's the core value of this tool."""
 
 
-def run_agent(user_message: str, conversation: list = None):
-    """Run one turn of the agent loop with tool use."""
+def _create_message(client: anthropic.Anthropic, conversation: list, **kwargs):
+    """Send the conversation to Claude with the agent's system prompt and tools."""
+    return client.messages.create(
+        model=MODEL,
+        max_tokens=MAX_TOKENS,
+        system=SYSTEM_PROMPT,
+        tools=TOOLS,
+        messages=conversation,
+        **kwargs,
+    )
+
+
+def _is_error_payload(output: str) -> bool:
+    """True if a tool returned its JSON error shape ({"error": ...})."""
+    try:
+        return "error" in json.loads(output)
+    except (ValueError, TypeError):
+        return False
+
+
+def _run_tools(content: list) -> list[dict]:
+    """Execute every tool_use block and return one tool_result per block.
+
+    Never raises: a failing tool becomes an is_error result, so every tool_use
+    in the history always has a matching tool_result.
+    """
+    tool_results = []
+    for tool_use in (b for b in content if b.type == "tool_use"):
+        print(f"  [tool] Calling: {tool_use.name}({json.dumps(tool_use.input, ensure_ascii=False)[:80]}...)")
+        try:
+            output = dispatch_tool(tool_use.name, tool_use.input)
+            is_error = _is_error_payload(output)
+        except Exception as e:  # e.g. TypeError from unexpected tool arguments
+            output = json.dumps({"error": f"{type(e).__name__}: {e}"})
+            is_error = True
+        tool_results.append({
+            "type": "tool_result",
+            "tool_use_id": tool_use.id,
+            "content": output,
+            "is_error": is_error,
+        })
+    return tool_results
+
+
+def _finish_turn(response, conversation: list) -> tuple[str, list]:
+    """Record the final assistant message of a turn and return its text."""
+    # Drop tool_use blocks we will not run (e.g. one cut off by max_tokens):
+    # an unanswered tool_use would make every later request fail.
+    content = [b for b in response.content if b.type != "tool_use"]
+    text = "\n".join(b.text for b in content if b.type == "text")
+
+    if response.stop_reason == "max_tokens":
+        text += "\n\n[Response truncated: reached max_tokens.]"
+    elif response.stop_reason == "refusal":
+        text = text or "[The model declined to answer this request.]"
+
+    if not content:
+        content = [{"type": "text", "text": text.strip() or "(empty response)"}]
+    conversation.append({"role": "assistant", "content": content})
+    return text.strip(), conversation
+
+
+def run_agent(user_message: str, conversation: list | None = None) -> tuple[str, list]:
+    """Run one user turn of the agent loop with tool use.
+
+    `conversation` is extended in place. If the turn fails (API error,
+    Ctrl-C), everything added during the turn is rolled back so the history
+    stays valid for the next turn.
+    """
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
     if conversation is None:
         conversation = []
 
+    checkpoint = len(conversation)
     conversation.append({"role": "user", "content": user_message})
 
-    # Agent loop: keep going until Claude stops calling tools
-    while True:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
-            messages=conversation,
-        )
+    try:
+        for _ in range(MAX_TOOL_ROUNDS):
+            response = _create_message(client, conversation)
+            if response.stop_reason != "tool_use":
+                return _finish_turn(response, conversation)
 
-        # Collect all content blocks
-        assistant_content = response.content
-        conversation.append({"role": "assistant", "content": assistant_content})
+            conversation.append({"role": "assistant", "content": response.content})
+            conversation.append({"role": "user", "content": _run_tools(response.content)})
 
-        # Check if there are tool calls
-        tool_uses = [b for b in assistant_content if b.type == "tool_use"]
+        # Cap reached: ask for a final answer from the results so far, no more tools.
+        print(f"  [agent] Reached {MAX_TOOL_ROUNDS} tool rounds; asking for a final answer.")
+        response = _create_message(client, conversation, tool_choice={"type": "none"})
+        return _finish_turn(response, conversation)
 
-        if not tool_uses:
-            # No more tool calls — extract final text and return
-            text_blocks = [b.text for b in assistant_content if b.type == "text"]
-            return "\n".join(text_blocks), conversation
-
-        # Process each tool call
-        tool_results = []
-        for tool_use in tool_uses:
-            print(f"  [tool] Calling: {tool_use.name}({json.dumps(tool_use.input, ensure_ascii=False)[:80]}...)")
-            result = dispatch_tool(tool_use.name, tool_use.input)
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": tool_use.id,
-                "content": result,
-            })
-
-        conversation.append({"role": "user", "content": tool_results})
+    except BaseException:
+        del conversation[checkpoint:]
+        raise
 
 
 # ── CLI Interface ───────────────────────────────────────────────────
@@ -531,8 +584,10 @@ def main():
         try:
             response, conversation = run_agent(user_input, conversation)
             print(f"\nAgent:\n{response}")
+        except KeyboardInterrupt:
+            print("\nInterrupted. That turn was discarded.")
         except Exception as e:
-            print(f"\nError: {e}")
+            print(f"\nError: {e}\n(That turn was discarded; you can ask again.)")
 
 
 if __name__ == "__main__":
