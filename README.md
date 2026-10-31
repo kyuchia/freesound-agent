@@ -55,7 +55,7 @@ Freesound is the source database behind major audio ML datasets (FSD50K, ESC-50,
 ### Install
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/kyuchia/freesound-agent.git
 cd freesound-agent
 python -m venv venv
 source venv/bin/activate
